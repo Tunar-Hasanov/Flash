@@ -2,31 +2,31 @@ package main
 
 import (
 	"log"
-	"os"
-	"strconv"
-	"strings"
-
-	"github.com/go-telegram-bot-api/telegram-bot-api"
-	"github.com/tronprotocol/go-tron/api"
-	"github.com/tronprotocol/go-tron/common"
+	"net/http"
+	"bytes"
+	"encoding/json"
 )
 
 const (
-	telegramToken = "YOUR_TELEGRAM_BOT_TOKEN"
-	usdtContractAddress = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" // USDT contract address on Tron mainnet
+	telegramToken = "TELEGRAM_BOT_TOKEN'ınız"
+	usdtContractAddress = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" // Tron mainnet üzerindeki USDT sözleşme adresi
+	tronGridAPIKey = "TRONGRID_API_KEY'iniz"
 )
 
-var tronClient *api.GrpcClient
+type TransferRequest struct {
+	To     string `json:"to"`
+	Value  int64  `json:"value"`
+	TokenID string `json:"tokenID"`
+}
 
 func main() {
+	// Telegram botunu başlat
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
 		log.Panic(err)
 	}
 
-	tronClient = api.NewGrpcClient("https://api.trongrid.io")
-
-	log.Printf("Bot is running. Press Ctrl+C to exit.")
+	log.Printf("Bot çalışıyor. Çıkmak için Ctrl+C'ye basın.")
 
 	u := tgbotapi.NewUpdate(0)
 	u.Timeout = 60
@@ -34,7 +34,7 @@ func main() {
 	updates, err := bot.GetUpdatesChan(u)
 
 	for update := range updates {
-		if update.Message == nil { // ignore any non-Message updates
+		if update.Message == nil {
 			continue
 		}
 
@@ -43,54 +43,76 @@ func main() {
 
 			switch update.Message.Command() {
 			case "start":
-				msg.Text = "Welcome to USDT Transfer Bot!"
+				msg.Text = "USDT Transfer Bot'una hoş geldiniz!"
 			case "help":
-				msg.Text = "Commands:\n/sendusdt <address> <amount> - Send USDT to the specified address"
+				msg.Text = "Komutlar:\n/sendusdt <adres> <miktar> - Belirtilen adrese USDT gönder"
 			case "sendusdt":
 				args := update.Message.CommandArguments()
 				parts := strings.Fields(args)
 				if len(parts) != 2 {
-					msg.Text = "Usage: /sendusdt <address> <amount>"
+					msg.Text = "Kullanım: /sendusdt <adres> <miktar>"
 				} else {
-					address := parts[0]
-					amount, err := strconv.ParseFloat(parts[1], 64)
+					adres := parts[0]
+					miktarStr := parts[1]
+					miktar, err := strconv.ParseFloat(miktarStr, 64)
 					if err != nil {
-						msg.Text = "Invalid amount. Please enter a valid number."
+						msg.Text = "Geçersiz miktar. Lütfen geçerli bir sayı girin."
 					} else {
-						err := sendUSDT(bot, update.Message.Chat.ID, address, amount)
+						err := sendUSDT(bot, update.Message.Chat.ID, adres, miktar)
 						if err != nil {
-							msg.Text = "Error sending USDT: " + err.Error()
+							msg.Text = "USDT gönderilirken hata oluştu: " + err.Error()
 						} else {
-							msg.Text = "USDT sent successfully!"
+							msg.Text = "USDT başarıyla gönderildi!"
 						}
 					}
 				}
 			default:
-				msg.Text = "Unknown command. Type /help for available commands."
+				msg.Text = "Bilinmeyen komut. Kullanılabilir komutlar için /help yazın."
 			}
 
 			_, err := bot.Send(msg)
 			if err != nil {
-				log.Println("Error sending message:", err)
+				log.Println("Mesaj gönderirken hata oluştu:", err)
 			}
 		}
 	}
 }
 
-func sendUSDT(bot *tgbotapi.BotAPI, chatID int64, address string, amount float64) error {
-	// Prepare USDT transfer
-	fromAddress := tronClient.GetDefaultAccount()
-	toAddress := common.HexToAddress(address)
-	assetName := common.USDT
-	amountInSun := int64(amount * 1000000) // Convert amount to SUN (1 USDT = 10^6 SUN)
+func sendUSDT(bot *tgbotapi.BotAPI, chatID int64, adres string, miktar float64) error {
+	// USDT transfer isteğini hazırla
+	transferReq := TransferRequest{
+		To:     adres,
+		Value:  int64(miktar * 1000000), // Miktarı SUN cinsinden belirt (1 USDT = 10^6 SUN)
+		TokenID: usdtContractAddress,
+	}
 
-	// Execute USDT transfer
-	txID, err := tronClient.SendAsset(fromAddress, toAddress, assetName, amountInSun)
+	// İsteği JSON'a dönüştür
+	reqBody, err := json.Marshal(transferReq)
 	if err != nil {
 		return err
 	}
 
-	log.Printf("USDT sent: %s", txID)
+	// TronGrid API'sine transfer isteği gönder
+	apiURL := "https://api.trongrid.io/wallet/transferasset"
+	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("TRON-PRO-API-KEY", tronGridAPIKey)
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("TronGrid API isteği başarısız: %s", resp.Status)
+	}
+
+	log.Printf("USDT başarıyla gönderildi, Adres: %s", adres)
 
 	return nil
 }
