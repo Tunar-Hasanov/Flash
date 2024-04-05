@@ -2,25 +2,21 @@ package main
 
 import (
 	"log"
-	"net/http"
-	"bytes"
-	"encoding/json"
+	"os"
+	"strconv"
+	"strings"
+
+	tgbotapi "github.com/go-telegram-bot-api/telegram-bot-api"
+	"github.com/stellar/go/clients/horizon"
+	"github.com/stellar/go/keypair"
 )
 
 const (
-	telegramToken = "TELEGRAM_BOT_TOKEN'ınız"
-	usdtContractAddress = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t" // Tron mainnet üzerindeki USDT sözleşme adresi
-	tronGridAPIKey = "TRONGRID_API_KEY'iniz"
+	telegramToken     = "TELEGRAM_BOT_TOKEN'ınız"
+	stellarHorizonURL = "https://horizon-testnet.stellar.org" // Stellar testnet için kullanılıyor
 )
 
-type TransferRequest struct {
-	To     string `json:"to"`
-	Value  int64  `json:"value"`
-	TokenID string `json:"tokenID"`
-}
-
 func main() {
-	// Telegram botunu başlat
 	bot, err := tgbotapi.NewBotAPI(telegramToken)
 	if err != nil {
 		log.Panic(err)
@@ -43,14 +39,14 @@ func main() {
 
 			switch update.Message.Command() {
 			case "start":
-				msg.Text = "USDT Transfer Bot'una hoş geldiniz!"
+				msg.Text = "Stellar Transfer Bot'una hoş geldiniz!"
 			case "help":
-				msg.Text = "Komutlar:\n/sendusdt <adres> <miktar> - Belirtilen adrese USDT gönder"
-			case "sendusdt":
+				msg.Text = "Komutlar:\n/sendxlm <adres> <miktar> - Belirtilen adrese XLM transferi yap"
+			case "sendxlm":
 				args := update.Message.CommandArguments()
 				parts := strings.Fields(args)
 				if len(parts) != 2 {
-					msg.Text = "Kullanım: /sendusdt <adres> <miktar>"
+					msg.Text = "Kullanım: /sendxlm <adres> <miktar>"
 				} else {
 					adres := parts[0]
 					miktarStr := parts[1]
@@ -58,11 +54,11 @@ func main() {
 					if err != nil {
 						msg.Text = "Geçersiz miktar. Lütfen geçerli bir sayı girin."
 					} else {
-						err := sendUSDT(bot, update.Message.Chat.ID, adres, miktar)
+						err := sendXLM(adres, miktar)
 						if err != nil {
-							msg.Text = "USDT gönderilirken hata oluştu: " + err.Error()
+							msg.Text = "XLM transferi sırasında hata oluştu: " + err.Error()
 						} else {
-							msg.Text = "USDT başarıyla gönderildi!"
+							msg.Text = "XLM başarıyla transfer edildi!"
 						}
 					}
 				}
@@ -78,41 +74,30 @@ func main() {
 	}
 }
 
-func sendUSDT(bot *tgbotapi.BotAPI, chatID int64, adres string, miktar float64) error {
-	// USDT transfer isteğini hazırla
-	transferReq := TransferRequest{
-		To:     adres,
-		Value:  int64(miktar * 1000000), // Miktarı SUN cinsinden belirt (1 USDT = 10^6 SUN)
-		TokenID: usdtContractAddress,
-	}
+func sendXLM(adres string, miktar float64) error {
+	// Stellar Horizon client oluştur
+	client := horizon.DefaultPublicNetClient
 
-	// İsteği JSON'a dönüştür
-	reqBody, err := json.Marshal(transferReq)
+	// Gönderen Stellar hesap oluştur
+	kp := keypair.MustRandom()
+
+	// Alıcı adresi ve miktarı belirt
+	destination := adres
+	amount := strconv.FormatFloat(miktar, 'f', -1, 64)
+
+	// Transaction oluştur
+	tx, err := horizon.BuildTransaction(client, kp.Address(), destination, amount)
 	if err != nil {
 		return err
 	}
 
-	// TronGrid API'sine transfer isteği gönder
-	apiURL := "https://api.trongrid.io/wallet/transferasset"
-	req, err := http.NewRequest("POST", apiURL, bytes.NewBuffer(reqBody))
+	// Transaction submit et
+	resp, err := horizon.SubmitTransaction(client, tx, kp)
 	if err != nil {
 		return err
 	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("TRON-PRO-API-KEY", tronGridAPIKey)
 
-	client := &http.Client{}
-	resp, err := client.Do(req)
-	if err != nil {
-		return err
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("TronGrid API isteği başarısız: %s", resp.Status)
-	}
-
-	log.Printf("USDT başarıyla gönderildi, Adres: %s", adres)
+	log.Printf("XLM başarıyla transfer edildi, TX ID: %s", resp.ID)
 
 	return nil
 }
