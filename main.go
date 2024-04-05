@@ -32,7 +32,7 @@ type TronConfig struct {
 func main() {
 	// 配置Bot和Tron
 	botConfig := &BotConfig{
-		Token:          "7177482058:AAHamZhZcVsgIbj3REv1Hn4jzzmnFcoAK10", // 替换成你的Telegram Bot的token
+		Token:          "YOUR_TELEGRAM_BOT_TOKEN", // 替换成你的Telegram Bot的token
 		AdminChatID:    YOUR_TELEGRAM_CHAT_ID,     // 替换成你的Telegram Chat ID
 		RateUSDTtoTRX:  30,                        // 1 USDT 可以兑换30 TRX
 		MaxDecimalsUSDT: 4,                        // USDT小数点后最多保留4位
@@ -40,8 +40,8 @@ func main() {
 	tronConfig := &TronConfig{
 		FullNodeAPI:    "https://api.trongrid.io", // Tron Full Node API的地址
 		SolidityAPI:    "https://api.trongrid.io", // Tron Solidity API的地址
-		DefaultAccount: "TXHYCr4NcdfzogZzN7JZPajVwApdna5nAH", // 替换成你的Tron账户地址
-		PrivateKey:     "af32f7780d53053b22bb4a739e741ee4f539a09d5c3527f9c5c5bdeef13aad75", // 替换成你的Tron账户私钥
+		DefaultAccount: "YOUR_TRON_ACCOUNT_ADDRESS", // 替换成你的Tron账户地址
+		PrivateKey:     "YOUR_TRON_ACCOUNT_PRIVATE_KEY", // 替换成你的Tron账户私钥
 	}
 
 	// 配置Bot和Tron API
@@ -931,7 +931,7 @@ http.HandleFunc("/"+bot.Token, func(w http.ResponseWriter, r *http.Request) {
 	}
 })
 
-err = http.ListenAndServeTLS("localhost:3000" ,nil)
+err = http.ListenAndServeTLS("YOUR_LISTEN_ADDRESS", "YOUR_SSL_CERT_PATH", "YOUR_SSL_KEY_PATH", nil)
 if err != nil {
 	log.Fatal(err)
 }
